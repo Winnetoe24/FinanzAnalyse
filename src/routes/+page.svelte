@@ -10,6 +10,8 @@
 	});
 </script>
 
+<h1>Finanz Analyse<h1>
+
 {#await doStuff()}
 	Lädt
 {:then value}

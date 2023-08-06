@@ -1,21 +1,28 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod finanzapi;
+mod fetch;
+
 use std::arch::x86_64::__m128;
+use std::fs;
 use reqwest::{Client, Error};
+use crate::finanzapi::FinanzData;
 
 struct State{
   client: reqwest::Client
 }
 
 fn main() {
-  tauri::Builder::default()
-      .manage(State{
-        client: reqwest::Client::new()
-      })
-      .invoke_handler(tauri::generate_handler![my_custom_command])
-    .run(tauri::generate_context!())
-    .expect("error while running tauri application");
+    let  cache: FinanzData = serde_json::from_str(fs::read_to_string("./cache.json").expect("File").as_str()).expect("serde");
+    println!("{:?}", cache);
+    // tauri::Builder::default()
+  //     .manage(State{
+  //       client: reqwest::Client::new()
+  //     })
+  //     .invoke_handler(tauri::generate_handler![my_custom_command])
+  //   .run(tauri::generate_context!())
+  //   .expect("error while running tauri application");
 }
 
 // Declare the async function using String instead of &str, as &str is borrowed and thus unsupported
