@@ -3,13 +3,15 @@
 
 mod finanzapi;
 mod fetch;
+mod data;
 
 use std::arch::x86_64::__m128;
 use std::fs;
 use std::time::Instant;
-use chrono::{DateTime, Local, TimeZone};
+use chrono::{DateTime, Local, NaiveDate, TimeZone, Utc};
 use reqwest::Error;
 use reqwest::blocking::Client;
+use crate::data::parse_to_view_data;
 use crate::fetch::FetchAble;
 use crate::finanzapi::{FinanzApiFetchData, FinanzApiRequestInformation, FinanzData};
 
@@ -20,6 +22,7 @@ struct State{
 fn main() {
     let time = Local::now();
     println!("{}", (&time).format("%Y-%m-%d"));
+    NaiveDate::parse_from_str("2023-08-13", "%Y-%m-%d").expect("");
     // let  cache: FinanzData = serde_json::from_str(fs::read_to_string("./cache.json").expect("File").as_str()).expect("serde");
     let client = reqwest::blocking::Client::new();
     let data = FinanzApiFetchData {
@@ -29,14 +32,24 @@ fn main() {
     let mut information = FinanzApiRequestInformation::GetWeekly {
         key: "IBM".to_string(),
         from: None,
-        bis: Local::now()
+        bis: Local::now().date_naive()
     };
 
-    println!("{}", &information.getCachePath());
+    println!("{}", &information.get_cache_path());
 
     let finanz_box: Box<dyn FetchAble<FinanzData, FinanzApiRequestInformation>> = Box::new(data);
-    let result = fetch::get_cache_or_fetch(&finanz_box, &client, &mut information).expect("Cache or fetch");
-    println!("{:?}", result);
+    let result1 = fetch::get_cache_or_fetch(&finanz_box, &client, &mut information);
+    if result1.is_err() {
+        let error = result1.err().expect("");
+        println!("{}", &error);
+        panic!("{}", error);
+
+    }
+    let result = result1.expect("Cache or fetch");
+    let to_view_data = parse_to_view_data(result).expect("View Data");
+
+    println!("{:?}", to_view_data);
+    // println!("{:?}", result);
     // println!("Equals: {}",result.eq(&cache));
 
 

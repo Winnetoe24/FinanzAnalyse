@@ -4,7 +4,7 @@ use std::fmt::{Debug, format, Formatter, Write};
 use std::marker::PhantomData;
 use std::ops::Add;
 use std::time::Instant;
-use chrono::{DateTime, Local, TimeZone};
+use chrono::{DateTime, Local, NaiveDate, TimeZone};
 use reqwest::{Error};
 use serde::{de, Deserializer, Serialize, Serializer};
 use serde::de::{SeqAccess, Visitor};
@@ -25,14 +25,14 @@ pub enum FinanzApiRequestInformation {
     },
     GetWeekly {
         key: String,
-        from: Option<DateTime<Local>>,
-        bis: DateTime<Local>
+        from: Option<NaiveDate>,
+        bis: NaiveDate
     }
 }
 
 impl FinanzApiRequestInformation {
 
-    fn getCacheDirPath(&self) -> String {
+    fn get_cache_dir_path(&self) -> String {
         return match self {
             FinanzApiRequestInformation::Search { input } => {
                 "./cache/finanzapi/search".to_string()
@@ -42,24 +42,25 @@ impl FinanzApiRequestInformation {
             }
         }
     }
-    pub fn getCachePath(&self) -> String {
+    pub fn get_cache_path(&self) -> String {
         return match self {
             FinanzApiRequestInformation::Search { input } => {
-                self.getCacheDirPath().add("/").add(input.as_str()).add(".json")
+                self.get_cache_dir_path().add("/").add(input.as_str()).add(".json")
             }
             FinanzApiRequestInformation::GetWeekly { key, from, bis } => {
-                self.getCacheDirPath().add("/").add(format!("{}", bis.format("%d-%m-%Y")).as_str()).add(".json")
+                self.get_cache_dir_path().add("/").add(format!("{}", bis.format("%d-%m-%Y")).as_str()).add(".json")
             }
         }
     }
 
 
 
-    fn setBis(&mut self, neues_bis: String) -> Result<FinanzApiRequestInformation, FetchError>{
+    fn set_bis(&mut self, neues_bis: String) -> Result<FinanzApiRequestInformation, FetchError>{
         return match self {
             FinanzApiRequestInformation::Search { .. } => { todo!()}
             FinanzApiRequestInformation::GetWeekly { key, from, bis } => {
-                let result = Local.datetime_from_str(neues_bis.as_str(), "%Y-%m-%d")?;
+                println!("{}", &neues_bis);
+                let result = NaiveDate::parse_from_str("2023-08-13", "%Y-%m-%d")?;
                 Ok(FinanzApiRequestInformation::GetWeekly {
                     key: key.clone(),
                     from: from.clone(),
@@ -72,7 +73,7 @@ impl FinanzApiRequestInformation {
 
 impl FetchAble<FinanzData, FinanzApiRequestInformation> for FinanzApiFetchData {
     fn get_cache(&self, request_information: &mut FinanzApiRequestInformation) -> Result<Option<FinanzData>, FetchError> {
-        let cache_path = request_information.getCachePath();
+        let cache_path = request_information.get_cache_path();
         let file_content_result = std::fs::read_to_string(cache_path);
          if file_content_result.is_err() {
              return Ok(None);
@@ -83,7 +84,7 @@ impl FetchAble<FinanzData, FinanzApiRequestInformation> for FinanzApiFetchData {
     }
 
     fn invalidate_cache(&self, request_information: &mut FinanzApiRequestInformation) -> Result<(), FetchError> {
-        let cache_path = request_information.getCachePath();
+        let cache_path = request_information.get_cache_path();
         let _ = std::fs::remove_file(cache_path);
         Ok(())
     }
@@ -96,7 +97,6 @@ impl FetchAble<FinanzData, FinanzApiRequestInformation> for FinanzApiFetchData {
                     .query(&[("function","TIME_SERIES_WEEKLY"),("symbol", key), ("apikey",&self.api_key),("datatype","json")])
                     .send()?
                     .text()?;
-                println!("{}", response);
                 let result = serde_json::from_str(response.as_str())?;
                 Ok(result)
             }
@@ -105,10 +105,10 @@ impl FetchAble<FinanzData, FinanzApiRequestInformation> for FinanzApiFetchData {
     }
 
     fn write_to_cache(&self, fetched: &FinanzData, request_information: &mut FinanzApiRequestInformation) -> Result<(), FetchError> {
-        let request_information = request_information.setBis(fetched.mata_data.last_refreshed.clone())?;
-        let cache_dir_path = request_information.getCacheDirPath();
+        let request_information = request_information.set_bis(fetched.mata_data.last_refreshed.clone())?;
+        let cache_dir_path = request_information.get_cache_dir_path();
         std::fs::create_dir_all(cache_dir_path)?;
-        let cache_path = request_information.getCachePath();
+        let cache_path = request_information.get_cache_path();
         let string = serde_json::to_string(fetched)?;
         std::fs::write(cache_path,string)?;
         Ok(())

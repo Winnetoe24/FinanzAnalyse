@@ -1,4 +1,5 @@
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Display, Formatter};
+use std::fs::metadata;
 use std::io::Error;
 use chrono::ParseError;
 use tauri::utils::config::parse::does_supported_file_name_exist;
@@ -26,7 +27,7 @@ pub fn get_cache_or_fetch<T,R>(fetchAble: &Box<dyn FetchAble<T,R>>, client: &Cli
     }
     let fetched = fetchAble.fetch(client, request_information)?;
     println!("Fetched");
-    // fetchAble.invalidate_cache(request_information)?;
+    fetchAble.invalidate_cache(request_information)?;
     println!("Cache removed");
     fetchAble.write_to_cache(&fetched, request_information)?;
     println!("Cached");
@@ -67,10 +68,25 @@ impl From<ParseError> for FetchError {
 impl Debug for FetchError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         return match self {
-            Reqwest(err) => {err.fmt(f)}
-            IO(err) => {err.fmt(f)}
-            FetchError::SerdeJson(err) => {err.fmt(f)}
-            FetchError::ChronoParse(err) => {err.fmt(f)}
+            Reqwest(err) => {Debug::fmt(&err, f)}
+            IO(err) => {Debug::fmt(&err, f)}
+            FetchError::SerdeJson(err) => {Debug::fmt(&err, f)}
+            FetchError::ChronoParse(err) => {Debug::fmt(&err, f)}
+        }
+    }
+}
+
+impl Display for FetchError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        return match self {
+            Reqwest(err) => {
+                std::fmt::Display::fmt(&err, f)
+            }
+            IO(err) => {std::fmt::Display::fmt(&err, f)}
+            FetchError::SerdeJson(err) => {std::fmt::Display::fmt(&err, f)}
+            FetchError::ChronoParse(err) => {
+                writeln!(f,"Chrono Parse {:?}", &err.kind())?;
+                std::fmt::Display::fmt(&err, f)}
         }
     }
 }
