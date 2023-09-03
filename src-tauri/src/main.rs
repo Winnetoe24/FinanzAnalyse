@@ -4,6 +4,7 @@
 mod finanzapi;
 mod fetch;
 mod data;
+mod config;
 
 use std::arch::x86_64::__m128;
 use std::fs;
@@ -11,6 +12,7 @@ use std::time::Instant;
 use chrono::{DateTime, Local, NaiveDate, TimeZone, Utc};
 use reqwest::Error;
 use reqwest::blocking::Client;
+use crate::config::get_config;
 use crate::data::parse_to_view_data;
 use crate::fetch::FetchAble;
 use crate::finanzapi::{FinanzApiFetchData, FinanzApiRequestInformation, FinanzData};
@@ -25,10 +27,8 @@ fn main() {
     NaiveDate::parse_from_str("2023-08-13", "%Y-%m-%d").expect("");
     // let  cache: FinanzData = serde_json::from_str(fs::read_to_string("./cache.json").expect("File").as_str()).expect("serde");
     let client = reqwest::blocking::Client::new();
-    let data = FinanzApiFetchData {
-        api_key: "".to_string(),
-        url: "https://www.alphavantage.co/query".to_string(),
-    };
+    let config = unsafe { get_config() }.expect("Keine Config vorhanden.");
+    let data = FinanzApiFetchData::from(config);
     let mut information = FinanzApiRequestInformation::GetWeekly {
         key: "IBM".to_string(),
         from: None,

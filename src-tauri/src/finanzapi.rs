@@ -5,6 +5,7 @@ use std::marker::PhantomData;
 use std::ops::Add;
 use std::time::Instant;
 use chrono::{DateTime, Local, NaiveDate, TimeZone};
+use itertools::Itertools;
 use reqwest::{Error};
 use serde::{de, Deserializer, Serialize, Serializer};
 use serde::de::{SeqAccess, Visitor};
@@ -12,11 +13,23 @@ use serde::Deserialize;
 use tauri::async_runtime::TokioHandle;
 use crate::fetch::{FetchAble, FetchError};
 use reqwest::blocking::Client;
+use reqwest::header::IF_MATCH;
 use tauri::api::path::resolve_path;
+use tauri::utils::resources::resource_relpath;
+use crate::config::Config;
 
 pub struct FinanzApiFetchData {
     pub(crate) api_key: String,
     pub(crate) url: String,
+}
+
+impl From<Config> for FinanzApiFetchData {
+    fn from(value: Config) -> Self {
+        return FinanzApiFetchData {
+            api_key: value.finanz_api_key,
+            url: value.finanz_api_url,
+        }
+    }
 }
 
 pub enum FinanzApiRequestInformation {
@@ -31,8 +44,7 @@ pub enum FinanzApiRequestInformation {
 }
 
 impl FinanzApiRequestInformation {
-
-    fn get_cache_dir_path(&self) -> String {
+    pub(self) fn get_cache_dir_path(&self) -> String {
         return match self {
             FinanzApiRequestInformation::Search { input } => {
                 "./cache/finanzapi/search".to_string()
@@ -53,14 +65,12 @@ impl FinanzApiRequestInformation {
         }
     }
 
-
-
     fn set_bis(&mut self, neues_bis: String) -> Result<FinanzApiRequestInformation, FetchError>{
         return match self {
             FinanzApiRequestInformation::Search { .. } => { todo!()}
             FinanzApiRequestInformation::GetWeekly { key, from, bis } => {
                 println!("{}", &neues_bis);
-                let result = NaiveDate::parse_from_str("2023-08-13", "%Y-%m-%d")?;
+                let result = NaiveDate::parse_from_str(&neues_bis.as_str(), "%Y-%m-%d")?;
                 Ok(FinanzApiRequestInformation::GetWeekly {
                     key: key.clone(),
                     from: from.clone(),
@@ -112,6 +122,46 @@ impl FetchAble<FinanzData, FinanzApiRequestInformation> for FinanzApiFetchData {
         let string = serde_json::to_string(fetched)?;
         std::fs::write(cache_path,string)?;
         Ok(())
+    }
+
+    fn find_last_cache(&self, request_information: &mut FinanzApiRequestInformation) -> Result<Option<FinanzData>, FetchError> {
+        let cache_dir_path = request_information.get_cache_dir_path();
+        let mut date_vec = vec![];
+        for dir_entry in std::fs::read_dir(&cache_dir_path)? {
+            if dir_entry.is_err() { continue; }
+            let entry = dir_entry.expect("Get Dir Entry");
+            println!("Dir entry: \"{:?}\"", &entry.file_name());
+            let len = &entry.file_name().len();
+            if len <= &5 { continue; }
+            let name_without_json = &entry
+                .file_name()
+                .into_string()
+                .expect("String")
+                .chars()
+                .take(len - 5)
+                .join("");
+            println!("Date: \"{}\"", &name_without_json);
+            let date = NaiveDate::parse_from_str(name_without_json, "%d-%m-%Y")?;
+            println!("Date parsed");
+            date_vec.push(date);
+        }
+        date_vec.sort();
+        date_vec.reverse();
+        let last_date = date_vec.get(0);
+        if last_date.is_none() {
+            println!("No Date Found");
+            return Ok(None);
+        }
+        println!("Date Vec {:?}", &date_vec);
+        let cache_path = cache_dir_path.add("/").add(&last_date.expect("Get Date").format("%d-%m-%Y").to_string()).add(".json");
+        println!("CachePath {}", &cache_path);
+        let file_content_result = std::fs::read_to_string(cache_path);
+        if file_content_result.is_err() {
+            return Ok(None);
+        }
+        let file_content = file_content_result.expect("Get File Content");
+        let result = serde_json::from_str(file_content.as_str())?;
+        Ok(Some(result))
     }
 }
 
